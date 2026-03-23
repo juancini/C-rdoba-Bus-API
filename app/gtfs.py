@@ -3,7 +3,7 @@ import csv
 import io
 import os
 import httpx
-from datetime import datetime, time
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 GTFS_URL = "https://s3.transitpdf.com/files/uran/improved-gtfs-cordoba-ar.zip"
@@ -37,7 +37,8 @@ class GTFSData:
         self.stops: dict = {}  # stop_id -> stop dict
         self.routes: dict = {}  # route_id -> route dict
         self.trips: dict = {}  # trip_id -> trip dict
-        self.stop_times: dict = {}  # stop_id -> list of {trip_id, arrival_seconds, route_id}
+        self.stop_times: dict = {}  # stop_id -> list of arrival dicts
+        self._trip_stop_seq: dict = {}  # trip_id -> list of {stop_id, stop_sequence}
 
     def load(self):
         """Download (if needed) and parse the GTFS zip."""
@@ -59,8 +60,6 @@ class GTFSData:
         print(f"Loaded {len(self.stops)} stops, {len(self.routes)} routes.")
 
     def _read_csv(self, zf: zipfile.ZipFile, name: str):
-        """Read a CSV file from the zip, return list of dicts."""
-        # Some feeds put files in a subfolder
         names = zf.namelist()
         match = next((n for n in names if n.endswith(name)), None)
         if not match:
@@ -98,7 +97,8 @@ class GTFSData:
             }
 
     def _parse_stop_times(self, zf):
-        for row in self._read_csv(zf, "stop_times.txt"):
+        rows = self._read_csv(zf, "stop_times.txt")
+        for row in rows:
             stop_id = row["stop_id"]
             trip_id = row["trip_id"]
             arrival_str = row.get("arrival_time", "") or row.get("departure_time", "")
@@ -109,13 +109,13 @@ class GTFSData:
             except ValueError:
                 continue
 
+            # Build stop_times index (for next-buses queries)
             route_id = self.trips.get(trip_id, {}).get("route_id", "")
             headsign = self.trips.get(trip_id, {}).get("headsign", "")
             route = self.routes.get(route_id, {})
 
             if stop_id not in self.stop_times:
                 self.stop_times[stop_id] = []
-
             self.stop_times[stop_id].append(
                 {
                     "trip_id": trip_id,
@@ -124,6 +124,16 @@ class GTFSData:
                     "headsign": headsign,
                     "arrival_seconds": arrival_seconds,
                     "arrival_time": _seconds_to_hhmm(arrival_seconds),
+                }
+            )
+
+            # Build trip->stop sequence index (for stops_for_route)
+            if trip_id not in self._trip_stop_seq:
+                self._trip_stop_seq[trip_id] = []
+            self._trip_stop_seq[trip_id].append(
+                {
+                    "stop_id": stop_id,
+                    "stop_sequence": int(row.get("stop_sequence", 0)),
                 }
             )
 
@@ -140,36 +150,30 @@ class GTFSData:
         now = _now_seconds()
         arrivals = self.stop_times.get(stop_id, [])
 
-        # Find upcoming arrivals (wraps around midnight)
         upcoming = [a for a in arrivals if a["arrival_seconds"] >= now]
         if len(upcoming) < limit:
-            # Wrap around: add start-of-day arrivals
-            upcoming += arrivals[:limit]
+            upcoming += arrivals[:limit]  # wrap around midnight
 
         result = []
         for a in upcoming[:limit]:
             diff = a["arrival_seconds"] - now
             if diff < 0:
-                diff += 86400  # past midnight wrap
+                diff += 86400
             result.append(
                 {
-                    **a,
+                    **{k: v for k, v in a.items() if k != "arrival_seconds"},
                     "minutes_away": round(diff / 60),
                 }
             )
         return result
 
     def stops_for_route(self, route_id: str) -> list:
-        """Get ordered unique stops for a route (from first trip found)."""
+        """Get ordered stops for a route (using first trip found)."""
         trip = next((t for t in self.trips.values() if t["route_id"] == route_id), None)
         if not trip:
             return []
         trip_id = trip["trip_id"]
-        stop_ids = [
-            st["stop_id"]
-            for st in sorted(
-                [s for s in self._flat_stop_times if s.get("trip_id") == trip_id],
-                key=lambda x: x.get("stop_sequence", 0),
-            )
-        ]
-        return [self.stops[s] for s in stop_ids if s in self.stops]
+        seq = sorted(
+            self._trip_stop_seq.get(trip_id, []), key=lambda x: x["stop_sequence"]
+        )
+        return [self.stops[s["stop_id"]] for s in seq if s["stop_id"] in self.stops]
