@@ -1,13 +1,25 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from contextlib import asynccontextmanager
-from app.gtfs import GTFSData
+from app.repositories import GTFSRepository
+from app.services import GTFSService
+from app.routes import stops, routes, health
 
-gtfs = GTFSData()
+# Initialize repository and service
+repository = GTFSRepository()
+gtfs_service = GTFSService(repository)
+
+# Inject service into route handlers
+stops.set_service(gtfs_service)
+routes.set_service(gtfs_service)
+health.set_service(gtfs_service)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    gtfs.load()
+    """Load GTFS data on startup."""
+    repository.load()
     yield
+
 
 app = FastAPI(
     title="Córdoba Bus API",
@@ -15,44 +27,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-@app.get("/health")
-def health():
-    return {"status": "ok", "stops_loaded": len(gtfs.stops)}
+# Register routers
+app.include_router(health.router)
+app.include_router(stops.router)
+app.include_router(routes.router)
 
-@app.get("/stops/search")
-def search_stops(q: str):
-    """Search stops by name. E.g. /stops/search?q=nueva+córdoba"""
-    results = gtfs.search_stops(q)
-    if not results:
-        raise HTTPException(status_code=404, detail="No stops found")
-    return results
-
-@app.get("/stops/{stop_id}")
-def get_stop(stop_id: str):
-    """Get a single stop by ID."""
-    stop = gtfs.stops.get(stop_id)
-    if not stop:
-        raise HTTPException(status_code=404, detail="Stop not found")
-    return stop
-
-@app.get("/stops/{stop_id}/next-buses")
-def next_buses(stop_id: str, limit: int = 5):
-    """
-    Get the next scheduled buses for a stop.
-    Times are based on the static schedule (no realtime yet).
-    """
-    if stop_id not in gtfs.stops:
-        raise HTTPException(status_code=404, detail="Stop not found")
-    arrivals = gtfs.next_arrivals(stop_id, limit=limit)
-    return {
-        "stop": gtfs.stops[stop_id],
-        "next_buses": arrivals,
-    }
 
 @app.get("/routes")
 def list_routes():
     """List all routes."""
     return list(gtfs.routes.values())
+
 
 @app.get("/routes/{route_id}/stops")
 def route_stops(route_id: str):
