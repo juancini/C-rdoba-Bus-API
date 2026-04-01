@@ -25,9 +25,9 @@ class GTFSRepository:
 
     def __init__(self):
         self.stops: dict[str, Stop] = {}  # stop_id -> stop dict (small, kept in memory)
-        self.routes: dict[
-            str, Route
-        ] = {}  # route_id -> route dict (small, kept in memory)
+        self.routes: dict[str, Route] = (
+            {}
+        )  # route_id -> route dict (small, kept in memory)
         self.trips: dict[str, Trip] = {}  # trip_id -> trip dict (small, kept in memory)
         self.stop_times = _StopTimesSQLiteProxy(self.DB_PATH)  # Queries from DB
         self._trip_stop_seq = _TripStopSeqSQLiteProxy(self.DB_PATH)  # Queries from DB
@@ -62,7 +62,8 @@ class GTFSRepository:
         cursor = self._conn.cursor()
 
         # Create stop_times table
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE stop_times (
                 stop_id TEXT NOT NULL,
                 trip_id TEXT NOT NULL,
@@ -72,16 +73,19 @@ class GTFSRepository:
                 arrival_seconds INTEGER NOT NULL,
                 arrival_time TEXT NOT NULL
             )
-        """)
+        """
+        )
 
         # Create trip_stop_seq table
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE trip_stop_seq (
                 trip_id TEXT NOT NULL,
                 stop_id TEXT NOT NULL,
                 stop_sequence INTEGER NOT NULL
             )
-        """)
+        """
+        )
 
         # Create indexes for fast queries
         cursor.execute("CREATE INDEX idx_stop_times_stop_id ON stop_times(stop_id)")
@@ -188,15 +192,13 @@ class GTFSRepository:
             )
 
             # Add trip->stop sequence record to batch
-            seq_batch.append(
-                (trip_id, stop_id, int(row.get("stop_sequence", 0)))
-            )
+            seq_batch.append((trip_id, stop_id, int(row.get("stop_sequence", 0))))
 
             # Insert batches if full
             if len(batch) >= batch_size:
                 cursor.executemany(
-                    """INSERT INTO stop_times 
-                       (stop_id, trip_id, route_id, route_short_name, headsign, 
+                    """INSERT INTO stop_times
+                       (stop_id, trip_id, route_id, route_short_name, headsign,
                         arrival_seconds, arrival_time)
                        VALUES (?, ?, ?, ?, ?, ?, ?)""",
                     batch,
@@ -212,8 +214,8 @@ class GTFSRepository:
         # Insert remaining batches
         if batch:
             cursor.executemany(
-                """INSERT INTO stop_times 
-                   (stop_id, trip_id, route_id, route_short_name, headsign, 
+                """INSERT INTO stop_times
+                   (stop_id, trip_id, route_id, route_short_name, headsign,
                     arrival_seconds, arrival_time)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 batch,
@@ -241,7 +243,7 @@ class _StopTimesSQLiteProxy:
         cursor = conn.cursor()
 
         cursor.execute(
-            """SELECT trip_id, route_id, route_short_name, headsign, 
+            """SELECT trip_id, route_id, route_short_name, headsign,
                       arrival_seconds, arrival_time
                FROM stop_times
                WHERE stop_id = ?
