@@ -1,3 +1,3 @@
-from . import stops, routes, health
+from . import health, routes, stops
 
-__all__ = ["stops", "routes", "health"]
+__all__ = ["health", "routes", "stops"]

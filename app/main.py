@@ -1,8 +1,10 @@
-from fastapi import FastAPI
 from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException
+
 from app.repositories import GTFSRepository
+from app.routes import health, routes, stops
 from app.services import GTFSService
-from app.routes import stops, routes, health
 
 # Initialize repository and service
 repository = GTFSRepository()
@@ -15,7 +17,7 @@ health.set_service(gtfs_service)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     """Load GTFS data on startup."""
     repository.load()
     yield
@@ -36,13 +38,13 @@ app.include_router(routes.router)
 @app.get("/routes")
 def list_routes():
     """List all routes."""
-    return list(gtfs.routes.values())
+    return list(gtfs_service.routes.values())
 
 
 @app.get("/routes/{route_id}/stops")
 def route_stops(route_id: str):
     """List all stops for a route."""
-    stops = gtfs.stops_for_route(route_id)
+    stops = gtfs_service.stops_for_route(route_id)
     if not stops:
         raise HTTPException(status_code=404, detail="Route not found")
     return stops

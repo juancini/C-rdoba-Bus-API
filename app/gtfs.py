@@ -1,10 +1,11 @@
-import zipfile
 import csv
 import io
 import os
-import httpx
+import zipfile
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+import httpx
 
 GTFS_URL = "https://s3.transitpdf.com/files/uran/improved-gtfs-cordoba-ar.zip"
 GTFS_LOCAL_PATH = "gtfs.zip"

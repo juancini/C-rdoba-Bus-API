@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from app.models import StopSearch, NextBuses, Stop
+
+from app.models import NextBuses, Stop, StopSearch
 
 # This will be injected from main.py
 gtfs_service = None

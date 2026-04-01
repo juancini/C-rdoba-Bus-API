@@ -1,13 +1,19 @@
-from .stop import Stop, StopSearch
+from .arrival import Arrival, HealthCheck, NextBuses
 from .route import Route, RouteStops
-from .arrival import Arrival, NextBuses, HealthCheck
+from .stop import Stop, StopSearch
+from .stop_time import StopTime
+from .trip import Trip
 
 __all__ = [
-    "Stop",
-    "StopSearch",
+    "Arrival",
+    "HealthCheck",
+    "NextBuses",
     "Route",
     "RouteStops",
-    "Arrival",
-    "NextBuses",
-    "HealthCheck",
+    "Stop",
+    "Stop",
+    "StopSearch",
+    "StopSearch",
+    "StopTime",
+    "Trip",
 ]

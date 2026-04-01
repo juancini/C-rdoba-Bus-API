@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+
 from app.models import HealthCheck
 
 # This will be injected from main.py

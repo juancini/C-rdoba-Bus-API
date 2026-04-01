@@ -1,4 +1,7 @@
+from typing import ClassVar
+
 from pydantic import BaseModel
+
 from .stop import Stop
 
 
@@ -11,7 +14,7 @@ class Route(BaseModel):
     type: str
 
     class Config:
-        json_schema_extra = {
+        json_schema_extra: ClassVar = {
             "example": {
                 "route_id": "R100",
                 "short_name": "100",

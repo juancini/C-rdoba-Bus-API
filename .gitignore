@@ -1,3 +1,6 @@
+__pycache__/
+*.pyc
+
 venv/lib64
 venv/pyvenv.cfg
 venv/bin/activate
@@ -2018,3 +2021,4 @@ venv/lib/python3.12/site-packages/yaml/__pycache__/serializer.cpython-312.pyc
 venv/lib/python3.12/site-packages/yaml/__pycache__/tokens.cpython-312.pyc
 app/__pycache__/gtfs.cpython-312.pyc
 app/__pycache__/main.cpython-312.pyc
+*/__pycache__/*

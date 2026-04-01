@@ -1,9 +1,12 @@
-import zipfile
 import csv
 import io
 import os
+import zipfile
+
 import httpx
-from app.core import GTFS_URL, GTFS_LOCAL_PATH
+
+from app.core import GTFS_LOCAL_PATH, GTFS_URL
+from app.models import Route, Stop, StopTime, Trip
 from app.utils import parse_time
 
 
@@ -11,11 +14,15 @@ class GTFSRepository:
     """Data access layer for GTFS data. Handles loading and parsing GTFS files."""
 
     def __init__(self):
-        self.stops: dict = {}  # stop_id -> stop dict
-        self.routes: dict = {}  # route_id -> route dict
-        self.trips: dict = {}  # trip_id -> trip dict
-        self.stop_times: dict = {}  # stop_id -> list of arrival dicts
-        self._trip_stop_seq: dict = {}  # trip_id -> list of {stop_id, stop_sequence}
+        self.stops: dict[str, Stop] = {}  # stop_id -> stop dict
+        self.routes: dict[str, Route] = {}  # route_id -> route dict
+        self.trips: dict[str, Trip] = {}  # trip_id -> trip dict
+        self.stop_times: dict[
+            str, list[StopTime]
+        ] = {}  # stop_id -> list of arrival dicts
+        self._trip_stop_seq: dict[
+            str, list[dict]
+        ] = {}  # trip_id -> list of {stop_id, stop_sequence}
 
     def load(self):
         """Download (if needed) and parse the GTFS zip."""
@@ -57,32 +64,32 @@ class GTFSRepository:
     def _parse_stops(self, zf: zipfile.ZipFile):
         """Parse stops.txt from GTFS."""
         for row in self._read_csv(zf, "stops.txt"):
-            self.stops[row["stop_id"]] = {
-                "stop_id": row["stop_id"],
-                "name": row.get("stop_name", ""),
-                "lat": float(row.get("stop_lat", 0)),
-                "lon": float(row.get("stop_lon", 0)),
-            }
+            self.stops[row["stop_id"]] = Stop(
+                stop_id=row["stop_id"],
+                name=row.get("stop_name", ""),
+                lat=float(row.get("stop_lat", 0)),
+                lon=float(row.get("stop_lon", 0)),
+            )
 
     def _parse_routes(self, zf: zipfile.ZipFile):
         """Parse routes.txt from GTFS."""
         for row in self._read_csv(zf, "routes.txt"):
-            self.routes[row["route_id"]] = {
-                "route_id": row["route_id"],
-                "short_name": row.get("route_short_name", ""),
-                "long_name": row.get("route_long_name", ""),
-                "type": row.get("route_type", ""),
-            }
+            self.routes[row["route_id"]] = Route(
+                route_id=row["route_id"],
+                short_name=row.get("route_short_name", ""),
+                long_name=row.get("route_long_name", ""),
+                type=row.get("route_type", ""),
+            )
 
     def _parse_trips(self, zf: zipfile.ZipFile):
         """Parse trips.txt from GTFS."""
         for row in self._read_csv(zf, "trips.txt"):
-            self.trips[row["trip_id"]] = {
-                "trip_id": row["trip_id"],
-                "route_id": row.get("route_id", ""),
-                "service_id": row.get("service_id", ""),
-                "headsign": row.get("trip_headsign", ""),
-            }
+            self.trips[row["trip_id"]] = Trip(
+                trip_id=row["trip_id"],
+                route_id=row.get("route_id", ""),
+                service_id=row.get("service_id", ""),
+                headsign=row.get("trip_headsign", ""),
+            )
 
     def _parse_stop_times(self, zf: zipfile.ZipFile):
         """Parse stop_times.txt from GTFS."""
@@ -99,9 +106,10 @@ class GTFSRepository:
                 continue
 
             # Build stop_times index (for next-buses queries)
-            route_id = self.trips.get(trip_id, {}).get("route_id", "")
-            headsign = self.trips.get(trip_id, {}).get("headsign", "")
-            route = self.routes.get(route_id, {})
+            trip = self.trips.get(trip_id)
+            route_id = trip.route_id if trip else ""
+            headsign = trip.headsign if trip else ""
+            route = self.routes.get(route_id)
 
             if stop_id not in self.stop_times:
                 self.stop_times[stop_id] = []
@@ -109,14 +117,14 @@ class GTFSRepository:
             from app.utils import seconds_to_hhmm
 
             self.stop_times[stop_id].append(
-                {
-                    "trip_id": trip_id,
-                    "route_id": route_id,
-                    "route_short_name": route.get("short_name", ""),
-                    "headsign": headsign,
-                    "arrival_seconds": arrival_seconds,
-                    "arrival_time": seconds_to_hhmm(arrival_seconds),
-                }
+                StopTime(
+                    trip_id=trip_id,
+                    route_id=route_id,
+                    route_short_name=route.short_name if route else "",
+                    headsign=headsign,
+                    arrival_seconds=arrival_seconds,
+                    arrival_time=seconds_to_hhmm(arrival_seconds),
+                )
             )
 
             # Build trip->stop sequence index (for stops_for_route)
@@ -131,4 +139,4 @@ class GTFSRepository:
 
         # Sort each stop's arrivals by time
         for stop_id in self.stop_times:
-            self.stop_times[stop_id].sort(key=lambda x: x["arrival_seconds"])
+            self.stop_times[stop_id].sort(key=lambda x: x.arrival_seconds)

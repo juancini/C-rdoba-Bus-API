@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from pydantic import BaseModel
 
 
@@ -10,7 +12,7 @@ class Stop(BaseModel):
     lon: float
 
     class Config:
-        json_schema_extra = {
+        json_schema_extra: ClassVar = {
             "example": {
                 "stop_id": "1001",
                 "name": "Nueva Córdoba - Centro",

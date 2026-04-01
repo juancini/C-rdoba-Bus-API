@@ -1,4 +1,7 @@
+from typing import ClassVar
+
 from pydantic import BaseModel
+
 from .stop import Stop
 
 
@@ -13,7 +16,7 @@ class Arrival(BaseModel):
     minutes_away: int
 
     class Config:
-        json_schema_extra = {
+        json_schema_extra: ClassVar = {
             "example": {
                 "trip_id": "TRIP-001",
                 "route_id": "R100",
