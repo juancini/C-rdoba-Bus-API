@@ -153,6 +153,7 @@ class GTFSRepository:
         # Batch insert for better performance
         batch_size = 1000
         batch = []
+        seq_batch = []
 
         for row in rows:
             stop_id = row["stop_id"]
@@ -186,7 +187,12 @@ class GTFSRepository:
                 )
             )
 
-            # Insert batch if full
+            # Add trip->stop sequence record to batch
+            seq_batch.append(
+                (trip_id, stop_id, int(row.get("stop_sequence", 0)))
+            )
+
+            # Insert batches if full
             if len(batch) >= batch_size:
                 cursor.executemany(
                     """INSERT INTO stop_times 
@@ -196,15 +202,14 @@ class GTFSRepository:
                     batch,
                 )
                 batch = []
+                cursor.executemany(
+                    """INSERT INTO trip_stop_seq (trip_id, stop_id, stop_sequence)
+                       VALUES (?, ?, ?)""",
+                    seq_batch,
+                )
+                seq_batch = []
 
-            # Add trip->stop sequence record
-            cursor.execute(
-                """INSERT INTO trip_stop_seq (trip_id, stop_id, stop_sequence)
-                   VALUES (?, ?, ?)""",
-                (trip_id, stop_id, int(row.get("stop_sequence", 0))),
-            )
-
-        # Insert remaining batch
+        # Insert remaining batches
         if batch:
             cursor.executemany(
                 """INSERT INTO stop_times 
@@ -212,6 +217,12 @@ class GTFSRepository:
                     arrival_seconds, arrival_time)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 batch,
+            )
+        if seq_batch:
+            cursor.executemany(
+                """INSERT INTO trip_stop_seq (trip_id, stop_id, stop_sequence)
+                   VALUES (?, ?, ?)""",
+                seq_batch,
             )
 
         self._conn.commit()
