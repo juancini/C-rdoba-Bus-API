@@ -2,6 +2,7 @@ import csv
 import io
 import os
 import sqlite3
+import traceback
 import zipfile
 
 import httpx
@@ -35,11 +36,19 @@ class GTFSRepository:
 
     def load(self):
         """Download (if needed) and parse the GTFS zip."""
+        print("load() started")
+        print("load() step 1: ensuring GTFS file exists")
         self._ensure_gtfs_file()
+        print("load() step 1 complete: GTFS file ready")
         log_memory("Before GTFS Load")
+        print("load() step 2: initialising database")
         self._init_db()
+        print("load() step 2 complete: database initialised")
+        print("load() step 3: parsing GTFS feed")
         self._parse_gtfs()
+        print("load() step 3 complete: GTFS feed parsed")
         log_memory("After GTFS Load")
+        print("load() finished")
 
     def _ensure_gtfs_file(self):
         """Download GTFS file if it doesn't exist locally."""
@@ -98,10 +107,22 @@ class GTFSRepository:
         """Parse all GTFS files from the zip."""
         print("Parsing GTFS feed...")
         with zipfile.ZipFile(GTFS_LOCAL_PATH) as zf:
+            print("Starting _parse_stops()")
             self._parse_stops(zf)
+            print(f"Completed _parse_stops() - {len(self.stops)} stops")
+
+            print("Starting _parse_routes()")
             self._parse_routes(zf)
+            print(f"Completed _parse_routes() - {len(self.routes)} routes")
+
+            print("Starting _parse_trips()")
             self._parse_trips(zf)
+            print(f"Completed _parse_trips() - {len(self.trips)} trips")
+
+            print("Starting _parse_stop_times()")
             self._parse_stop_times(zf)
+            print(f"Completed _parse_stop_times()")
+
         print(f"Loaded {len(self.stops)} stops, {len(self.routes)} routes.")
 
     def _read_csv(self, zf: zipfile.ZipFile, name: str):
@@ -147,7 +168,9 @@ class GTFSRepository:
 
     def _parse_stop_times(self, zf: zipfile.ZipFile):
         """Parse stop_times.txt from GTFS and store in SQLite."""
+        print("Starting _parse_stop_times()")
         rows = self._read_csv(zf, "stop_times.txt")
+        print(f"Total rows to process: {len(rows)}")
         cursor = self._conn.cursor()
 
         # Batch insert for better performance
@@ -155,62 +178,76 @@ class GTFSRepository:
         batch = []
         seq_batch = []
 
-        for row in rows:
-            stop_id = row["stop_id"]
-            trip_id = row["trip_id"]
-            arrival_str = row.get("arrival_time", "") or row.get("departure_time", "")
-            if not arrival_str:
-                continue
-            try:
-                arrival_seconds = parse_time(arrival_str)
-            except ValueError:
-                continue
+        try:
+            for i, row in enumerate(rows):
+                if i > 0 and i % 1000 == 0:
+                    print(f"Processed {i} rows...")
 
-            # Get trip and route info
-            trip = self.trips.get(trip_id)
-            route_id = trip.route_id if trip else ""
-            headsign = trip.headsign if trip else ""
-            route = self.routes.get(route_id)
+                stop_id = row["stop_id"]
+                trip_id = row["trip_id"]
+                arrival_str = row.get("arrival_time", "") or row.get("departure_time", "")
+                if not arrival_str:
+                    continue
+                try:
+                    arrival_seconds = parse_time(arrival_str)
+                except ValueError:
+                    continue
 
-            from app.utils import seconds_to_hhmm
+                # Get trip and route info
+                trip = self.trips.get(trip_id)
+                route_id = trip.route_id if trip else ""
+                headsign = trip.headsign if trip else ""
+                route = self.routes.get(route_id)
 
-            # Add stop_times record to batch
-            batch.append(
-                (
-                    stop_id,
-                    trip_id,
-                    route_id,
-                    route.short_name if route else "",
-                    headsign,
-                    arrival_seconds,
-                    seconds_to_hhmm(arrival_seconds),
+                from app.utils import seconds_to_hhmm
+
+                # Add stop_times record to batch
+                batch.append(
+                    (
+                        stop_id,
+                        trip_id,
+                        route_id,
+                        route.short_name if route else "",
+                        headsign,
+                        arrival_seconds,
+                        seconds_to_hhmm(arrival_seconds),
+                    )
                 )
-            )
 
-            # Add trip->stop sequence record to batch
-            seq_batch.append(
-                (trip_id, stop_id, int(row.get("stop_sequence", 0)))
-            )
+                # Add trip->stop sequence record to batch
+                seq_batch.append(
+                    (trip_id, stop_id, int(row.get("stop_sequence", 0)))
+                )
 
-            # Insert batches if full
-            if len(batch) >= batch_size:
-                cursor.executemany(
-                    """INSERT INTO stop_times 
-                       (stop_id, trip_id, route_id, route_short_name, headsign, 
-                        arrival_seconds, arrival_time)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    batch,
-                )
-                batch = []
-                cursor.executemany(
-                    """INSERT INTO trip_stop_seq (trip_id, stop_id, stop_sequence)
-                       VALUES (?, ?, ?)""",
-                    seq_batch,
-                )
-                seq_batch = []
+                # Insert batches if full
+                if len(batch) >= batch_size:
+                    print(f"Inserting batch of {len(batch)} stop_times records")
+                    cursor.executemany(
+                        """INSERT INTO stop_times 
+                           (stop_id, trip_id, route_id, route_short_name, headsign, 
+                            arrival_seconds, arrival_time)
+                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        batch,
+                    )
+                    print("Batch inserted successfully")
+                    batch = []
+                    print(f"Inserting batch of {len(seq_batch)} trip_stop_seq records")
+                    cursor.executemany(
+                        """INSERT INTO trip_stop_seq (trip_id, stop_id, stop_sequence)
+                           VALUES (?, ?, ?)""",
+                        seq_batch,
+                    )
+                    print("Seq batch inserted successfully")
+                    seq_batch = []
+
+        except Exception:
+            print(f"Exception in _parse_stop_times() at row {i}:")
+            print(traceback.format_exc())
+            raise
 
         # Insert remaining batches
         if batch:
+            print(f"Inserting batch of {len(batch)} stop_times records")
             cursor.executemany(
                 """INSERT INTO stop_times 
                    (stop_id, trip_id, route_id, route_short_name, headsign, 
@@ -218,14 +255,19 @@ class GTFSRepository:
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 batch,
             )
+            print("Batch inserted successfully")
         if seq_batch:
+            print(f"Inserting batch of {len(seq_batch)} trip_stop_seq records")
             cursor.executemany(
                 """INSERT INTO trip_stop_seq (trip_id, stop_id, stop_sequence)
                    VALUES (?, ?, ?)""",
                 seq_batch,
             )
+            print("Seq batch inserted successfully")
 
+        print("Committing database...")
         self._conn.commit()
+        print("Finished _parse_stop_times()")
 
 
 class _StopTimesSQLiteProxy:
