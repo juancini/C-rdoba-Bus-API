@@ -84,7 +84,7 @@ class GTFSData:
             self.routes[row["route_id"]] = {
                 "route_id": row["route_id"],
                 "short_name": row.get("route_short_name", ""),
-                "long_name": row.get("route_long_name", ""),Option B sounds the best, ideally in SQLite as to make it simple and evade the db setup and running.
+                "long_name": row.get("route_long_name", ""),
                 "type": row.get("route_type", ""),
             }
 
