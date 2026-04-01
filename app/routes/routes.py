@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.models import Route, RouteStops
 
@@ -19,7 +19,7 @@ def get_route_stops(route_id: str):
     """Get all stops along a route in order."""
     route_data = gtfs_service.repo.routes.get(route_id)
     if not route_data:
-        return {"error": "Route not found"}
+        raise HTTPException(status_code=404, detail="Route not found")
 
     # route_data is already a Route object, no need to instantiate
     route = route_data
