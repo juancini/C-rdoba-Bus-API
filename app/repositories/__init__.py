@@ -126,15 +126,15 @@ class GTFSRepository:
         print(f"Loaded {len(self.stops)} stops, {len(self.routes)} routes.")
 
     def _read_csv(self, zf: zipfile.ZipFile, name: str):
-        """Read a CSV file from the GTFS zip."""
+        """Read a CSV file from the GTFS zip, yielding one row at a time."""
         names = zf.namelist()
         match = next((n for n in names if n.endswith(name)), None)
         if not match:
-            return []
+            return
         with zf.open(match) as f:
             content = f.read().decode("utf-8-sig")  # handle BOM
             reader = csv.DictReader(io.StringIO(content))
-            return list(reader)
+            yield from reader
 
     def _parse_stops(self, zf: zipfile.ZipFile):
         """Parse stops.txt from GTFS."""
@@ -169,8 +169,6 @@ class GTFSRepository:
     def _parse_stop_times(self, zf: zipfile.ZipFile):
         """Parse stop_times.txt from GTFS and store in SQLite."""
         print("Starting _parse_stop_times()")
-        rows = self._read_csv(zf, "stop_times.txt")
-        print(f"Total rows to process: {len(rows)}")
         cursor = self._conn.cursor()
 
         # Batch insert for better performance
@@ -179,7 +177,7 @@ class GTFSRepository:
         seq_batch = []
 
         try:
-            for i, row in enumerate(rows):
+            for i, row in enumerate(self._read_csv(zf, "stop_times.txt")):
                 if i > 0 and i % 1000 == 0:
                     print(f"Processed {i} rows...")
 
