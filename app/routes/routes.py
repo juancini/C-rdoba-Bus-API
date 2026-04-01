@@ -21,7 +21,8 @@ def get_route_stops(route_id: str):
     if not route_data:
         return {"error": "Route not found"}
 
-    route = Route(**route_data)
+    # route_data is already a Route object, no need to instantiate
+    route = route_data
     stops = gtfs_service.get_stops_for_route(route_id)
 
     return {
