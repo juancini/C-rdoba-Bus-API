@@ -1,11 +1,15 @@
 import csv
 import io
+import logging
 import os
 import zipfile
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import httpx
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 GTFS_URL = "https://s3.transitpdf.com/files/uran/improved-gtfs-cordoba-ar.zip"
 GTFS_LOCAL_PATH = "gtfs.zip"
@@ -44,21 +48,21 @@ class GTFSData:
     def load(self):
         """Download (if needed) and parse the GTFS zip."""
         if not os.path.exists(GTFS_LOCAL_PATH):
-            print("Downloading GTFS feed...")
+            logger.info("Downloading GTFS feed...")
             with httpx.Client(follow_redirects=True, timeout=30) as client:
                 r = client.get(GTFS_URL)
                 r.raise_for_status()
             with open(GTFS_LOCAL_PATH, "wb") as f:
                 f.write(r.content)
-            print("Downloaded.")
+            logger.info("Downloaded.")
 
-        print("Parsing GTFS feed...")
+        logger.info("Parsing GTFS feed...")
         with zipfile.ZipFile(GTFS_LOCAL_PATH) as zf:
             self._parse_stops(zf)
             self._parse_routes(zf)
             self._parse_trips(zf)
             self._parse_stop_times(zf)
-        print(f"Loaded {len(self.stops)} stops, {len(self.routes)} routes.")
+        logger.info(f"Loaded {len(self.stops)} stops, {len(self.routes)} routes.")
 
     def _read_csv(self, zf: zipfile.ZipFile, name: str):
         names = zf.namelist()

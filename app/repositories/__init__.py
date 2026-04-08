@@ -29,9 +29,9 @@ class GTFSRepository:
 
     def __init__(self):
         self.stops: dict[str, Stop] = {}  # stop_id -> stop dict (small, kept in memory)
-        self.routes: dict[
-            str, Route
-        ] = {}  # route_id -> route dict (small, kept in memory)
+        self.routes: dict[str, Route] = (
+            {}
+        )  # route_id -> route dict (small, kept in memory)
         self.trips: dict[str, Trip] = {}  # trip_id -> trip dict (small, kept in memory)
         self.stop_times = _StopTimesSQLiteProxy(self.DB_PATH)  # Queries from DB
         self._trip_stop_seq = _TripStopSeqSQLiteProxy(self.DB_PATH)  # Queries from DB
