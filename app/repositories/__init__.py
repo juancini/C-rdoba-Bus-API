@@ -26,9 +26,9 @@ class GTFSRepository:
 
     def __init__(self):
         self.stops: dict[str, Stop] = {}  # stop_id -> stop dict (small, kept in memory)
-        self.routes: dict[
-            str, Route
-        ] = {}  # route_id -> route dict (small, kept in memory)
+        self.routes: dict[str, Route] = (
+            {}
+        )  # route_id -> route dict (small, kept in memory)
         self.trips: dict[str, Trip] = {}  # trip_id -> trip dict (small, kept in memory)
         self.stop_times = _StopTimesSQLiteProxy(self.DB_PATH)  # Queries from DB
         self._trip_stop_seq = _TripStopSeqSQLiteProxy(self.DB_PATH)  # Queries from DB
@@ -125,7 +125,7 @@ class GTFSRepository:
 
             print("Starting _parse_stop_times()")
             self._parse_stop_times(zf)
-            print(f"Completed _parse_stop_times()")
+            print("Completed _parse_stop_times()")
 
         print(f"Loaded {len(self.stops)} stops, {len(self.routes)} routes.")
 
@@ -225,8 +225,8 @@ class GTFSRepository:
                 if len(batch) >= batch_size:
                     print(f"Inserting batch of {len(batch)} stop_times records")
                     cursor.executemany(
-                        """INSERT INTO stop_times 
-                           (stop_id, trip_id, route_id, route_short_name, headsign, 
+                        """INSERT INTO stop_times
+                           (stop_id, trip_id, route_id, route_short_name, headsign,
                             arrival_seconds, arrival_time)
                            VALUES (?, ?, ?, ?, ?, ?, ?)""",
                         batch,
@@ -269,7 +269,6 @@ class GTFSRepository:
 
         print("Committing database...")
         self._conn.commit()
-        print("Finished _parse_stop_times()")
 
 
 class _StopTimesSQLiteProxy:
