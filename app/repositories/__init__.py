@@ -1,5 +1,6 @@
 import csv
 import io
+import logging
 import os
 import sqlite3
 import traceback
@@ -12,11 +13,13 @@ from app.core import GTFS_LOCAL_PATH, GTFS_URL
 from app.models import Route, Stop, StopTime, Trip
 from app.utils import parse_time
 
+logger = logging.getLogger(__name__)
+
 
 def log_memory(step):
     process = psutil.Process(os.getpid())
     mem = process.memory_info().rss / 1024 / 1024
-    print(f"--- Memory at {step}: {mem:.2f} MB ---")
+    logger.info(f"--- Memory at {step}: {mem:.2f} MB ---")
 
 
 class GTFSRepository:
@@ -26,9 +29,9 @@ class GTFSRepository:
 
     def __init__(self):
         self.stops: dict[str, Stop] = {}  # stop_id -> stop dict (small, kept in memory)
-        self.routes: dict[str, Route] = (
-            {}
-        )  # route_id -> route dict (small, kept in memory)
+        self.routes: dict[
+            str, Route
+        ] = {}  # route_id -> route dict (small, kept in memory)
         self.trips: dict[str, Trip] = {}  # trip_id -> trip dict (small, kept in memory)
         self.stop_times = _StopTimesSQLiteProxy(self.DB_PATH)  # Queries from DB
         self._trip_stop_seq = _TripStopSeqSQLiteProxy(self.DB_PATH)  # Queries from DB
@@ -36,30 +39,30 @@ class GTFSRepository:
 
     def load(self):
         """Download (if needed) and parse the GTFS zip."""
-        print("load() started")
-        print("load() step 1: ensuring GTFS file exists")
+        logger.info("load() started")
+        logger.info("load() step 1: ensuring GTFS file exists")
         self._ensure_gtfs_file()
-        print("load() step 1 complete: GTFS file ready")
+        logger.info("load() step 1 complete: GTFS file ready")
         log_memory("Before GTFS Load")
-        print("load() step 2: initialising database")
+        logger.info("load() step 2: initialising database")
         self._init_db()
-        print("load() step 2 complete: database initialised")
-        print("load() step 3: parsing GTFS feed")
+        logger.info("load() step 2 complete: database initialised")
+        logger.info("load() step 3: parsing GTFS feed")
         self._parse_gtfs()
-        print("load() step 3 complete: GTFS feed parsed")
+        logger.info("load() step 3 complete: GTFS feed parsed")
         log_memory("After GTFS Load")
-        print("load() finished")
+        logger.info("load() finished")
 
     def _ensure_gtfs_file(self):
         """Download GTFS file if it doesn't exist locally."""
         if not os.path.exists(GTFS_LOCAL_PATH):
-            print("Downloading GTFS feed...")
+            logger.info("Downloading GTFS feed...")
             with httpx.Client(follow_redirects=True, timeout=30) as client:
                 r = client.get(GTFS_URL)
                 r.raise_for_status()
             with open(GTFS_LOCAL_PATH, "wb") as f:
                 f.write(r.content)
-            print("Downloaded.")
+            logger.info("Downloaded.")
 
     def _init_db(self):
         """Initialize SQLite database with schema."""
@@ -109,25 +112,25 @@ class GTFSRepository:
 
     def _parse_gtfs(self):
         """Parse all GTFS files from the zip."""
-        print("Parsing GTFS feed...")
+        logger.info("Parsing GTFS feed...")
         with zipfile.ZipFile(GTFS_LOCAL_PATH) as zf:
-            print("Starting _parse_stops()")
+            logger.info("Starting _parse_stops()")
             self._parse_stops(zf)
-            print(f"Completed _parse_stops() - {len(self.stops)} stops")
+            logger.info(f"Completed _parse_stops() - {len(self.stops)} stops")
 
-            print("Starting _parse_routes()")
+            logger.info("Starting _parse_routes()")
             self._parse_routes(zf)
-            print(f"Completed _parse_routes() - {len(self.routes)} routes")
+            logger.info(f"Completed _parse_routes() - {len(self.routes)} routes")
 
-            print("Starting _parse_trips()")
+            logger.info("Starting _parse_trips()")
             self._parse_trips(zf)
-            print(f"Completed _parse_trips() - {len(self.trips)} trips")
+            logger.info(f"Completed _parse_trips() - {len(self.trips)} trips")
 
-            print("Starting _parse_stop_times()")
+            logger.info("Starting _parse_stop_times()")
             self._parse_stop_times(zf)
-            print("Completed _parse_stop_times()")
+            logger.info("Completed _parse_stop_times()")
 
-        print(f"Loaded {len(self.stops)} stops, {len(self.routes)} routes.")
+        logger.info(f"Loaded {len(self.stops)} stops, {len(self.routes)} routes.")
 
     def _read_csv(self, zf: zipfile.ZipFile, name: str):
         """Read a CSV file from the GTFS zip, yielding one row at a time."""
@@ -172,7 +175,7 @@ class GTFSRepository:
 
     def _parse_stop_times(self, zf: zipfile.ZipFile):
         """Parse stop_times.txt from GTFS and store in SQLite."""
-        print("Starting _parse_stop_times()")
+        logger.info("Starting _parse_stop_times()")
         cursor = self._conn.cursor()
 
         # Batch insert for better performance
@@ -183,7 +186,7 @@ class GTFSRepository:
         try:
             for i, row in enumerate(self._read_csv(zf, "stop_times.txt")):
                 if i > 0 and i % 1000 == 0:
-                    print(f"Processed {i} rows...")
+                    logger.info(f"Processed {i} rows...")
 
                 stop_id = row["stop_id"]
                 trip_id = row["trip_id"]
@@ -223,7 +226,7 @@ class GTFSRepository:
 
                 # Insert batches if full
                 if len(batch) >= batch_size:
-                    print(f"Inserting batch of {len(batch)} stop_times records")
+                    logger.info(f"Inserting batch of {len(batch)} stop_times records")
                     cursor.executemany(
                         """INSERT INTO stop_times
                            (stop_id, trip_id, route_id, route_short_name, headsign,
@@ -231,25 +234,27 @@ class GTFSRepository:
                            VALUES (?, ?, ?, ?, ?, ?, ?)""",
                         batch,
                     )
-                    print("Batch inserted successfully")
+                    logger.info("Batch inserted successfully")
                     batch = []
-                    print(f"Inserting batch of {len(seq_batch)} trip_stop_seq records")
+                    logger.info(
+                        f"Inserting batch of {len(seq_batch)} trip_stop_seq records"
+                    )
                     cursor.executemany(
                         """INSERT INTO trip_stop_seq (trip_id, stop_id, stop_sequence)
                            VALUES (?, ?, ?)""",
                         seq_batch,
                     )
-                    print("Seq batch inserted successfully")
+                    logger.info("Seq batch inserted successfully")
                     seq_batch = []
 
         except Exception:
-            print(f"Exception in _parse_stop_times() at row {i}:")
-            print(traceback.format_exc())
+            logger.info(f"Exception in _parse_stop_times() at row {i}:")
+            logger.info(traceback.format_exc())
             raise
 
         # Insert remaining batches
         if batch:
-            print(f"Inserting batch of {len(batch)} stop_times records")
+            logger.info(f"Inserting batch of {len(batch)} stop_times records")
             cursor.executemany(
                 """INSERT INTO stop_times
                    (stop_id, trip_id, route_id, route_short_name, headsign,
@@ -257,17 +262,17 @@ class GTFSRepository:
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 batch,
             )
-            print("Batch inserted successfully")
+            logger.info("Batch inserted successfully")
         if seq_batch:
-            print(f"Inserting batch of {len(seq_batch)} trip_stop_seq records")
+            logger.info(f"Inserting batch of {len(seq_batch)} trip_stop_seq records")
             cursor.executemany(
                 """INSERT INTO trip_stop_seq (trip_id, stop_id, stop_sequence)
                    VALUES (?, ?, ?)""",
                 seq_batch,
             )
-            print("Seq batch inserted successfully")
+            logger.info("Seq batch inserted successfully")
 
-        print("Committing database...")
+        logger.info("Committing database...")
         self._conn.commit()
 
 
