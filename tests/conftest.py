@@ -8,7 +8,6 @@ import pytest
 
 from app.models import Route, Stop, Trip
 from app.repositories import (
-    GTFSRepository,
     _StopTimesSQLiteProxy,
     _TripStopSeqSQLiteProxy,
 )

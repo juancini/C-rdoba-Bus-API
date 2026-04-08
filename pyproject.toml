@@ -50,6 +50,7 @@ select = [
     "ARG",    # flake8-unused-arguments
     "SIM",    # flake8-simplify
     "RUF",    # Ruff-specific rules
+    "T",      # flake8-print
 ]
 ignore = [
     "E501",   # line too long (handled by black)

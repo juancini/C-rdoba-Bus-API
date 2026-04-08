@@ -4,9 +4,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.services import GTFSService
 from app.repositories import GTFSRepository
-from app.routes import stops, routes as routes_module
+from app.routes import routes as routes_module
+from app.routes import stops
+from app.services import GTFSService
 
 
 @pytest.fixture

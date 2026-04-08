@@ -2,10 +2,9 @@
 
 import pytest
 
-from app.models import Arrival, Stop
+from app.models import Arrival
 from app.repositories import GTFSRepository
 from app.services import GTFSService
-from app.utils import get_now_seconds
 
 
 class TestGTFSService:
